@@ -199,7 +199,10 @@ function Ensure-Wkhtmltox {
 }
 Ensure-Wkhtmltox
 
-$done  = @{}$usedReported    = @{}
+
+$done = @{}
+$usedReported = @{}
+
 $createdReported = @{}$seenSelected   = @{}
 $seenProcessing = @{}$script:originalHashes = @{}
 $count = 0$skip  = @("watcher_config.json", "watcher.ps1", "Start Watcher.vbs", "Start Watcher.bat",
