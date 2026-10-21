@@ -172,7 +172,8 @@ function Ensure-Wkhtmltox {
 }
 Ensure-Wkhtmltox
 
-$done = @{}$usedReported = @{}
+$done = @{}
+$usedReported = @{}
 $createdReported = @{}$seenSelected = @{}
 $seenProcessing = @{}$script:originalHashes = @{}
 
