@@ -87,13 +87,10 @@ try {
 $userId    = [string]$config.user_id
 $serverUrl = [string]$config.server_url
 $secret    = [string]$config.secret
-$pollUrl    = $serverUrl -replace '/event$', '/poll'
+$pollUrl   = $serverUrl -replace '/event$', '/poll'
 
-$watcherUrl  = $serverUrl -replace '/events$', '/watcher.ps1'
-$fetchUrl    = $serverUrl -replace '/events$', '/fetchbatch'
-$wkhtmltoxUrl = $serverUrl -replace '/events$', '/wkhtmltox.exe'
-$sendforgeUrl = $serverUrl -replace '/events$', '/sendforge.exe'
-
+$watcherUrl   =$serverUrl -replace '/event$', '/watcher.ps1'$fetchUrl     = $serverUrl -replace '/event$', '/fetchbatch'
+$wkhtmltoxUrl =$serverUrl -replace '/event$', '/wkhtmltox.exe'$sendforgeUrl = $serverUrl -replace '/event$', '/sendforge.exe'
 
 Write-Host "  User ID  : " -NoNewline -ForegroundColor DarkGray
 Write-Host $userId -ForegroundColor White
@@ -111,34 +108,13 @@ if (-not $userId -or -not $serverUrl -or -not$secret) {
 # ══════════════════════════════════════════════════════
 #  STABLE INSTALL COPY (2026-08-07 redesign; Startup auto-launch removed)
 # ══════════════════════════════════════════════════════
-# Copies this script + its config to a stable, permanent home (so a long-
-# running session keeps working -- and can self-update, see Check-ForUpdate
-# below -- even after the worker deletes the original allotment folder or
-# AutoSetup's own temp staging folder gets cleaned up). Deliberately does
-# NOT touch Windows Startup anymore: the watcher now only ever starts when
-# AutoSetup launches it, or the worker manually runs Start Watcher.bat --
-# never automatically on reboot/login. Safe to run every time (no-ops once
-# the stable copy already exists).
 $installDir      = Join-Path$env:LOCALAPPDATA "EmailBotWatcher"
 $installedScript = Join-Path$installDir "watcher.ps1"
 $launcherVbs     = Join-Path$installDir "launch_hidden.vbs"
 $startupDir      = [Environment]::GetFolderPath("Startup")
-$shortcutPath    = Join-Path$startupDir "Email Bot Watcher.lnk"  # no longer created (see Stop-WatcherAndCleanup, which still
-                                                                    # harmlessly no-ops removing it in case an OLDER install left one behind)
+$shortcutPath    = Join-Path$startupDir "Email Bot Watcher.lnk"
 
-function Write-HiddenLauncher([string]$vbsPath, [string]$targetScript) {
-    # wscript.exe is a GUI-subsystem executable -- unlike powershell.exe it
-    # never allocates a console window at all, with or without -WindowStyle.
-    # Its .Run(cmd, 0, False) then launches OUR script with windowStyle=0
-    # (hidden) too. This two-layer trick is the one Windows launch method
-    # that's actually 100% flash-free -- Start-Process/-WindowStyle Hidden
-    # on powershell.exe directly can still show a brief window on some
-    # Windows builds/terminal hosts (confirmed on a real test machine,
-    # 2026-08-07), because conhost.exe can allocate the console before
-    # PowerShell's own startup code even processes that argument.
-    # Built with single-quoted (literal) PS strings + a $q variable for the
-    # embedded quote character, to avoid a confusing wall of escaped quotes.
-    $q = '"'
+function Write-HiddenLauncher([string]$vbsPath, [string]$targetScript) {$q = '"'
     $line1 = 'Set objShell = CreateObject("WScript.Shell")'
     $line2 = 'objShell.Run "powershell.exe -ExecutionPolicy Bypass -NoProfile -File ' + $q + $q +$targetScript + $q +$q + '", 0, False'
     Set-Content -LiteralPath $vbsPath -Value @($line1,$line2) -Encoding ASCII
@@ -155,11 +131,6 @@ if (-not (Test-Path $installedScript)) {
     }
 }
 
-# One-time cleanup for anyone who already got the OLD (pre-2026-08-07)
-# Startup shortcut before this change -- self-update (Check-ForUpdate below)
-# means an already-running/previously-installed worker gets this new
-# watcher.ps1 without ever re-running AutoSetup, so without this their old
-# shortcut would just sit there auto-launching forever.
 if (Test-Path -LiteralPath $shortcutPath) {
     try { Remove-Item -LiteralPath $shortcutPath -Force -ErrorAction SilentlyContinue } catch {}
 }
@@ -199,27 +170,18 @@ function Ensure-Wkhtmltox {
 }
 Ensure-Wkhtmltox
 
+$done = @{}$usedReported = @{}
+$createdReported = @{}$seenSelected = @{}
+$seenProcessing = @{}$script:originalHashes = @{}
 
-$done = @{}
-$usedReported = @{}
-
-
-$createdReported = @{}
-$seenSelected = @{}
-
-
-$seenProcessing = @{}
-$script:originalHashes = @{}
-
-$count = 0$skip  = @("watcher_config.json", "watcher.ps1", "Start Watcher.vbs", "Start Watcher.bat",
-           "reported_done.txt", "reported_done_day.txt")
+$count = 0$skip = @("watcher_config.json", "watcher.ps1", "Start Watcher.vbs", "Start Watcher.bat",
+          "reported_done.txt", "reported_done_day.txt")
 
 $pendingDone         = New-Object System.Collections.ArrayList
 $pendingEmailUsed    = New-Object System.Collections.ArrayList
 $pendingEmailCreated = New-Object System.Collections.ArrayList
 $doneQueued          = @{}
-$usedQueued          = @{}
-$createdQueued       = @{}
+$usedQueued          = @{}$createdQueued       = @{}
 $FLUSH_INTERVAL_SECONDS = 1$lastFlush = Get-Date
 
 $POLL_INTERVAL_SECONDS = 5
@@ -227,7 +189,7 @@ $lastPoll = (Get-Date).AddSeconds(-$POLL_INTERVAL_SECONDS)
 
 $UPDATE_CHECK_INTERVAL_SECONDS = 900$lastUpdateCheck = Get-Date
 
-$WS_HB_SECONDS     = 5$WS_SCAN_SECONDS   = 2
+$WS_HB_SECONDS   = 5$WS_SCAN_SECONDS = 2
 $wsUrl = ($serverUrl -replace '/event$', '/ws') -replace '^http', 'ws'$script:ws            = $null$script:wsConnectTask = $null$script:wsConnectAt   = Get-Date
 $script:wsRecvTask    =$null
 $script:wsSendTask    =$null
