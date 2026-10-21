@@ -235,7 +235,8 @@ function Get-LocalSnapshot {
 
 function Send-WsSync([switch]$Force) {
     $snap = Get-LocalSnapshot$filesJson = ($snap.FileStates | Sort-Object {$_.filename } | ConvertTo-Json -Compress -Depth 3)
-    $hasConfirms = ($script:pendingDeleteConfirmations.Count -gt 0 -or $script:pendingDownloadConfirmations.Count -gt 0)$unacked = @($script:wsSyncSent.Values | Where-Object { ((Get-Date) -$_.At).TotalSeconds -lt 20 }).Count
+    $hasConfirms = ($script:pendingDeleteConfirmations.Count -gt 0 -or $script:pendingDownloadConfirmations.Count -gt 0)
+$unacked = @($script:wsSyncSent.Values | Where-Object { ((Get-Date) - $_.At).TotalSeconds -lt 20 }).Count
     if (-not $Force -and -not $script:wsNeedSync -and -not$hasConfirms -and $filesJson -eq$script:wsLastFiles) { return }
     if (-not $Force -and$unacked -gt 0) { return }
     foreach ($k in @($script:wsSyncSent.Keys)) {
