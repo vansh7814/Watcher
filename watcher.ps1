@@ -91,7 +91,8 @@ $pollUrl   = $serverUrl -replace '/event$', '/poll'
 
 $watcherUrl = $serverUrl -replace '/event$', '/watcher.ps1'
 $fetchUrl = $serverUrl -replace '/event$', '/fetchbatch'
-$wkhtmltoxUrl =$serverUrl -replace '/event$', '/wkhtmltox.exe'$sendforgeUrl = $serverUrl -replace '/event$', '/sendforge.exe'
+$wkhtmltoxUrl = $serverUrl -replace '/event$', '/wkhtmltox.exe'
+$sendforgeUrl = $serverUrl -replace '/event$', '/sendforge.exe'
 
 Write-Host "  User ID  : " -NoNewline -ForegroundColor DarkGray
 Write-Host $userId -ForegroundColor White
