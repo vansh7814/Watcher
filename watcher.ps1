@@ -255,7 +255,8 @@ function Receive-WsState($msg) {
     $script:wsProto2 =$true
     if ($null -ne $msg.re -and$script:wsSyncSent.ContainsKey([int]$msg.re)) {$sent = $script:wsSyncSent[[int]$msg.re]
         $script:wsSyncSent.Remove([int]$msg.re)
-        foreach ($x in$sent.Del) { while ($script:pendingDeleteConfirmations.Contains($x)) { $script:pendingDeleteConfirmations.Remove($x) } }
+        foreach ($x in $sent.Del) { while ($script:pendingDeleteConfirmations.Contains($x)) { $script:pendingDeleteConfirmations.Remove($x) } }
+foreach ($x in $sent.Dl)  { while ($script:pendingDownloadConfirmations.Contains($x)) { $script:pendingDownloadConfirmations.Remove($x) } }
         foreach ($x in$sent.Dl)  { while ($script:pendingDownloadConfirmations.Contains($x)) { $script:pendingDownloadConfirmations.Remove($x) } }
     }
     $snap = Get-LocalSnapshot
