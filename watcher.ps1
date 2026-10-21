@@ -242,7 +242,9 @@ $unacked = @($script:wsSyncSent.Values | Where-Object { ((Get-Date) - $_.At).Tot
     foreach ($k in @($script:wsSyncSent.Keys)) {
         if (((Get-Date) - $script:wsSyncSent[$k].At).TotalSeconds -gt 60) { $script:wsSyncSent.Remove($k) }
     }
-    $script:wsSyncId++$id   = $script:wsSyncId$dels = @($script:pendingDeleteConfirmations)$dls  = @($script:pendingDownloadConfirmations)$script:wsSyncSent[$id] = @{ Del =$dels; Dl = $dls; At = (Get-Date) }$msg = @{ t = "sync"; id = $id; files =$snap.FileStates; confirmed_deletes = $dels; confirmed_downloads =$dls } |
+    $script:wsSyncId++
+$id   = $script:wsSyncId
+$dels = @($script:pendingDeleteConfirmations)
            ConvertTo-Json -Compress -Depth 4
     Send-WsText $msg
     $script:wsLastFiles =$filesJson
