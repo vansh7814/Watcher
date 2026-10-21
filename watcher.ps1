@@ -218,7 +218,8 @@ $pendingDone         = New-Object System.Collections.ArrayList
 $pendingEmailUsed    = New-Object System.Collections.ArrayList
 $pendingEmailCreated = New-Object System.Collections.ArrayList
 $doneQueued          = @{}
-$usedQueued          = @{}$createdQueued       = @{}
+$usedQueued          = @{}
+$createdQueued       = @{}
 $FLUSH_INTERVAL_SECONDS = 1$lastFlush = Get-Date
 
 $POLL_INTERVAL_SECONDS = 5
