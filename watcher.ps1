@@ -1,46 +1,18 @@
 param([switch]$CleanupMode, [switch]$StopWorkMode)
-# CleanupMode is a completely separate, one-shot, VISIBLE run of this same
-# script file -- see the "CLEANUP MODE" block further down (after all
-# functions are defined, since PowerShell only makes a function callable
-# once its own `function {}` line has actually executed). It skips the
-# mutex guard and config loading below entirely: it isn't "the" watcher,
-# doesn't talk to the server, and must never be blocked by an
-# already-running hidden watcher thinking this is a duplicate launch.
-# StopWorkMode is the same idea -- a separate, long-LIVED (not one-shot)
-# run that just shows the fullscreen STOP WORK overlay (see "STOP WORK
-# MODE" block below) until the main watcher tells it (via a flag file) that
-# the team's been resumed. Also skips the mutex/config gate below -- it's
-# pure local UI, never talks to the server itself.
 
-$scriptPath =$MyInvocation.MyCommand.Path
-$dir = Split-Path -Parent$scriptPath
-if (-not $dir) {$dir = Get-Location }
+$scriptPath = $MyInvocation.MyCommand.Path
+$dir = Split-Path -Parent $scriptPath
+if (-not $dir) { $dir = Get-Location }
 
 $Host.UI.RawUI.WindowTitle = if ($CleanupMode) { "Email Bot - Cleanup" } elseif ($StopWorkMode) { "Email Bot - Stop Work" } else { "Email Bot Watcher" }
 
-if (-not $CleanupMode -and -not$StopWorkMode) {
+if (-not $CleanupMode -and -not $StopWorkMode) {
 
-# ══════════════════════════════════════════════════════
-#  SINGLE-INSTANCE GUARD (2026-08-07 redesign)
-# ══════════════════════════════════════════════════════
-# Only ONE copy of this script should ever actually run the watch loop on a
-# given Windows login session -- every push still bundles a fresh copy of
-# this script into the worker's ZIP (same as before, harmless redundancy),
-# but only the FIRST one launched claims the mutex and becomes "the" central
-# watcher. Every later launch (worker double-clicking a new push's copy, or
-# Windows re-running an old shortcut) just finds the mutex already held and
-# exits immediately -- its folder gets picked up automatically by the
-# already-running instance instead (see Sync-WatchedFolders below).
-# "Local\" (not "Global\") scopes this to the current login session, so two
-# different Windows user accounts on a shared PC each get their own watcher.
 $script:centralMutex = New-Object System.Threading.Mutex($false, "Local\EmailBotCentralWatcher")
 try {
-    $script:isCentral =$script:centralMutex.WaitOne(0)
+    $script:isCentral = $script:centralMutex.WaitOne(0)
 } catch [System.Threading.AbandonedMutexException] {
-    # Previous central watcher crashed/was killed without releasing the
-    # mutex cleanly -- .NET still grants us ownership when this happens, it
-    # just throws to flag it. Treat it as a normal successful acquire.
-    $script:isCentral =$true
+    $script:isCentral = $true
 }
 
 if (-not $script:isCentral) {
@@ -54,12 +26,12 @@ if (-not $script:isCentral) {
 
 Write-Host ""
 Write-Host "  +======================================+" -ForegroundColor DarkCyan
-Write-Host "  |         EMAIL BOT X WATCHER            |" -ForegroundColor Cyan
+Write-Host "  |         EMAIL BOT X WATCHER          |" -ForegroundColor Cyan
 Write-Host "  +======================================+" -ForegroundColor DarkCyan
 Write-Host ""
 Write-Host "  Loading config..." -ForegroundColor DarkGray
 
-$configFile = Join-Path$dir "watcher_config.json"
+$configFile = Join-Path $dir "watcher_config.json"
 
 if (-not (Test-Path $configFile)) {
     Write-Host "  ERROR: watcher_config.json not found at $configFile" -ForegroundColor Red
@@ -67,18 +39,11 @@ if (-not (Test-Path $configFile)) {
     exit 1
 }
 
-$raw = Get-Content$configFile -Raw
+$raw = Get-Content $configFile -Raw
 
 try {
-    $config =$raw | ConvertFrom-Json -ErrorAction Stop
+    $config = $raw | ConvertFrom-Json -ErrorAction Stop
 } catch {
-    # A truncated/corrupted watcher_config.json (partial write during
-    # deploy/extraction, disk hiccup) used to throw an uncaught terminating
-    # error right here, before ever reaching the friendly "Config values
-    # missing" message a few lines below -- and since this can be a hidden
-    # relaunch (launch_hidden.vbs, windowStyle 0), that crash produced ZERO
-    # visible output: the watcher would just silently fail to start with no
-    # indication to the worker or admin at all.
     Write-Host "  ERROR: watcher_config.json is corrupted/unreadable at $configFile" -ForegroundColor Red
     Write-Host "  ($($_.Exception.Message))" -ForegroundColor Red
     Read-Host "Press Enter to exit"
@@ -89,8 +54,8 @@ $serverUrl = [string]$config.server_url
 $secret    = [string]$config.secret
 $pollUrl   = $serverUrl -replace '/event$', '/poll'
 
-$watcherUrl = $serverUrl -replace '/event$', '/watcher.ps1'
-$fetchUrl = $serverUrl -replace '/event$', '/fetchbatch'
+$watcherUrl   = $serverUrl -replace '/event$', '/watcher.ps1'
+$fetchUrl     = $serverUrl -replace '/event$', '/fetchbatch'
 $wkhtmltoxUrl = $serverUrl -replace '/event$', '/wkhtmltox.exe'
 $sendforgeUrl = $serverUrl -replace '/event$', '/sendforge.exe'
 
@@ -99,7 +64,7 @@ Write-Host $userId -ForegroundColor White
 Write-Host "  Server   : " -NoNewline -ForegroundColor DarkGray
 Write-Host $serverUrl -ForegroundColor White
 
-if (-not $userId -or -not $serverUrl -or -not$secret) {
+if (-not $userId -or -not $serverUrl -or -not $secret) {
     Write-Host "  ERROR: Config values missing" -ForegroundColor Red
     Read-Host "Press Enter to exit"
     exit 1
@@ -107,27 +72,25 @@ if (-not $userId -or -not $serverUrl -or -not$secret) {
 
 }
 
-# ══════════════════════════════════════════════════════
-#  STABLE INSTALL COPY (2026-08-07 redesign; Startup auto-launch removed)
-# ══════════════════════════════════════════════════════
-$installDir      = Join-Path$env:LOCALAPPDATA "EmailBotWatcher"
-$installedScript = Join-Path$installDir "watcher.ps1"
-$launcherVbs     = Join-Path$installDir "launch_hidden.vbs"
+$installDir      = Join-Path $env:LOCALAPPDATA "EmailBotWatcher"
+$installedScript = Join-Path $installDir "watcher.ps1"
+$launcherVbs     = Join-Path $installDir "launch_hidden.vbs"
 $startupDir      = [Environment]::GetFolderPath("Startup")
-$shortcutPath    = Join-Path$startupDir "Email Bot Watcher.lnk"
+$shortcutPath    = Join-Path $startupDir "Email Bot Watcher.lnk"
 
-function Write-HiddenLauncher([string]$vbsPath, [string]$targetScript) {$q = '"'
+function Write-HiddenLauncher([string]$vbsPath, [string]$targetScript) {
+    $q = '"'
     $line1 = 'Set objShell = CreateObject("WScript.Shell")'
-    $line2 = 'objShell.Run "powershell.exe -ExecutionPolicy Bypass -NoProfile -File ' + $q + $q +$targetScript + $q +$q + '", 0, False'
-    Set-Content -LiteralPath $vbsPath -Value @($line1,$line2) -Encoding ASCII
+    $line2 = 'objShell.Run "powershell.exe -ExecutionPolicy Bypass -NoProfile -File ' + $q + $q + $targetScript + $q + $q + '", 0, False'
+    Set-Content -LiteralPath $vbsPath -Value @($line1, $line2) -Encoding ASCII
 }
 
 if (-not (Test-Path $installedScript)) {
     try {
         New-Item -ItemType Directory -Path $installDir -Force -ErrorAction Stop | Out-Null
-        Copy-Item -LiteralPath $scriptPath -Destination$installedScript -Force
-        Copy-Item -LiteralPath $configFile -Destination (Join-Path$installDir "watcher_config.json") -Force
-        Write-HiddenLauncher $launcherVbs$installedScript
+        Copy-Item -LiteralPath $scriptPath -Destination $installedScript -Force
+        Copy-Item -LiteralPath $configFile -Destination (Join-Path $installDir "watcher_config.json") -Force
+        Write-HiddenLauncher $launcherVbs $installedScript
     } catch {
         Write-Host "  (Could not create stable install copy: $($_.Exception.Message))" -ForegroundColor Yellow
     }
@@ -139,14 +102,14 @@ if (Test-Path -LiteralPath $shortcutPath) {
 
 function Check-ForUpdate {
     try {
-        $latest  = (Invoke-WebRequest -Uri$watcherUrl -UseBasicParsing -TimeoutSec 15 -UserAgent 'Mozilla/5.0').Content
-        $current = Get-Content -LiteralPath$installedScript -Raw -ErrorAction Stop
-        if ($latest -eq$current) { return }
+        $latest  = (Invoke-WebRequest -Uri $watcherUrl -UseBasicParsing -TimeoutSec 15 -UserAgent 'Mozilla/5.0').Content
+        $current = Get-Content -LiteralPath $installedScript -Raw -ErrorAction Stop
+        if ($latest -eq $current) { return }
 
         Write-Host ""
         Write-Host "  Newer watcher version found -- updating and restarting..." -ForegroundColor Yellow
-        Set-Content -LiteralPath $installedScript -Value$latest -NoNewline -Encoding UTF8
-        if (-not (Test-Path $launcherVbs)) { Write-HiddenLauncher $launcherVbs$installedScript }
+        Set-Content -LiteralPath $installedScript -Value $latest -NoNewline -Encoding UTF8
+        if (-not (Test-Path $launcherVbs)) { Write-HiddenLauncher $launcherVbs $installedScript }
         Start-Sleep -Milliseconds 300
         $script:centralMutex.ReleaseMutex()
         Start-Process wscript.exe -ArgumentList @($launcherVbs)
@@ -156,13 +119,13 @@ function Check-ForUpdate {
 }
 
 function Ensure-Wkhtmltox {
-    $installedExe = Join-Path$env:ProgramFiles "wkhtmltopdf\bin\wkhtmltoimage.exe"
+    $installedExe = Join-Path $env:ProgramFiles "wkhtmltopdf\bin\wkhtmltoimage.exe"
     if (Test-Path -LiteralPath $installedExe) { return }
 
-    $tempExe = Join-Path$env:TEMP ("wkhtmltox_" + [Guid]::NewGuid().ToString("N") + ".exe")
+    $tempExe = Join-Path $env:TEMP ("wkhtmltox_" + [Guid]::NewGuid().ToString("N") + ".exe")
     try {
-        Invoke-WebRequest -Uri $wkhtmltoxUrl -UseBasicParsing -TimeoutSec 90 -OutFile$tempExe -ErrorAction Stop
-        if (-not (Test-Path $tempExe) -or (Get-Item$tempExe).Length -lt 1000000) { return }
+        Invoke-WebRequest -Uri $wkhtmltoxUrl -UseBasicParsing -TimeoutSec 90 -OutFile $tempExe -ErrorAction Stop
+        if (-not (Test-Path $tempExe) -or (Get-Item $tempExe).Length -lt 1000000) { return }
 
         Write-Host "  > Installing wkhtmltopdf (one-time)..." -ForegroundColor Yellow
         Start-Process -FilePath $tempExe -ArgumentList "/S" -Wait -WindowStyle Hidden -ErrorAction Stop
@@ -174,54 +137,76 @@ Ensure-Wkhtmltox
 
 $done = @{}
 $usedReported = @{}
-$createdReported = @{}$seenSelected = @{}
-$seenProcessing = @{}$script:originalHashes = @{}
+$createdReported = @{}
+$seenSelected = @{}
+$seenProcessing = @{}
+$script:originalHashes = @{}
 
-$count = 0$skip = @("watcher_config.json", "watcher.ps1", "Start Watcher.vbs", "Start Watcher.bat",
+$count = 0
+$skip = @("watcher_config.json", "watcher.ps1", "Start Watcher.vbs", "Start Watcher.bat",
           "reported_done.txt", "reported_done_day.txt")
 
 $pendingDone         = New-Object System.Collections.ArrayList
 $pendingEmailUsed    = New-Object System.Collections.ArrayList
 $pendingEmailCreated = New-Object System.Collections.ArrayList
 $doneQueued          = @{}
-$usedQueued          = @{}$createdQueued       = @{}
-$FLUSH_INTERVAL_SECONDS = 1$lastFlush = Get-Date
+$usedQueued          = @{}
+$createdQueued       = @{}
+$FLUSH_INTERVAL_SECONDS = 1
+$lastFlush = Get-Date
 
 $POLL_INTERVAL_SECONDS = 5
 $lastPoll = (Get-Date).AddSeconds(-$POLL_INTERVAL_SECONDS)
 
-$UPDATE_CHECK_INTERVAL_SECONDS = 900$lastUpdateCheck = Get-Date
+$UPDATE_CHECK_INTERVAL_SECONDS = 900
+$lastUpdateCheck = Get-Date
 
-$WS_HB_SECONDS   = 5$WS_SCAN_SECONDS = 2
-$wsUrl = ($serverUrl -replace '/event$', '/ws') -replace '^http', 'ws'$script:ws            = $null$script:wsConnectTask = $null$script:wsConnectAt   = Get-Date
-$script:wsRecvTask    =$null
-$script:wsSendTask    =$null
-$script:wsRecvBuf     = New-Object byte[] 65536$script:wsRecvStream  = New-Object System.IO.MemoryStream
+$WS_HB_SECONDS   = 5
+$WS_SCAN_SECONDS = 2
+$wsUrl = ($serverUrl -replace '/event$', '/ws') -replace '^http', 'ws'
+$script:ws            = $null
+$script:wsConnectTask = $null
+$script:wsConnectAt   = Get-Date
+$script:wsRecvTask    = $null
+$script:wsSendTask    = $null
+$script:wsRecvBuf     = New-Object byte[] 65536
+$script:wsRecvStream  = New-Object System.IO.MemoryStream
 $script:wsOutbox      = New-Object System.Collections.Queue
 $script:wsNextTry     = Get-Date
-$script:wsBackoff     = 3$script:wsLastHb      = Get-Date
-$script:wsPoke        =$false
-$script:wsUnsupported =$false
-$script:wsDownSince   = Get-Date$script:wsLinkedAt    = Get-Date
-$script:wsProto2      =$false
-$script:wsSyncId      = 0$script:wsSyncSent    = @{}
-$script:wsLastFiles   =$null
-$script:wsLastScan    = Get-Date$script:wsNeedSync    = $true$script:serverWatcherMd5 = ""
-$script:pollOkOnce    =$true
+$script:wsBackoff     = 3
+$script:wsLastHb      = Get-Date
+$script:wsPoke        = $false
+$script:wsUnsupported = $false
+$script:wsDownSince   = Get-Date
+$script:wsLinkedAt    = Get-Date
+$script:wsProto2      = $false
+$script:wsSyncId      = 0
+$script:wsSyncSent    = @{}
+$script:wsLastFiles   = $null
+$script:wsLastScan    = Get-Date
+$script:wsNeedSync    = $true
+$script:serverWatcherMd5 = ""
+$script:pollOkOnce    = $true
 
 function Reset-Ws {
-    try { if ($script:ws) { $script:ws.Abort();$script:ws.Dispose() } } catch {}
-    if ($script:ws -and -not $script:wsConnectTask) {$script:wsDownSince = Get-Date
+    try { if ($script:ws) { $script:ws.Abort(); $script:ws.Dispose() } } catch {}
+    if ($script:ws -and -not $script:wsConnectTask) {
+        $script:wsDownSince = Get-Date
     }
-    $script:ws            = $null$script:wsConnectTask = $null$script:wsRecvTask    = $null$script:wsSendTask    = $null$script:wsRecvStream.SetLength(0)
-    $script:wsOutbox.Clear()$script:wsSyncSent    = @{}
-    $script:wsProto2      =$false
+    $script:ws            = $null
+    $script:wsConnectTask = $null
+    $script:wsRecvTask    = $null
+    $script:wsSendTask    = $null
+    $script:wsRecvStream.SetLength(0)
+    $script:wsOutbox.Clear()
+    $script:wsSyncSent    = @{}
+    $script:wsProto2      = $false
     $script:wsNextTry     = (Get-Date).AddSeconds($script:wsBackoff)
-    $script:wsBackoff     = [Math]::Min(30,$script:wsBackoff * 2)
+    $script:wsBackoff     = [Math]::Min(30, $script:wsBackoff * 2)
 }
 
 function Test-WsLinked {
-    return ($null -ne$script:ws -and $null -eq$script:wsConnectTask)
+    return ($null -ne $script:ws -and $null -eq $script:wsConnectTask)
 }
 
 function Test-WsLive {
@@ -236,12 +221,12 @@ function Get-LocalSnapshot {
     $fileStates     = New-Object System.Collections.ArrayList
     $rootToLocation = @{}
     foreach ($folderPath in @($script:watchedFolders.Keys)) {
-        $currentFiles = Get-ChildItem -LiteralPath$folderPath -File -ErrorAction SilentlyContinue
-        foreach ($f in$currentFiles) {
-            if ($skip -contains$f.Name) { continue }
+        $currentFiles = Get-ChildItem -LiteralPath $folderPath -File -ErrorAction SilentlyContinue
+        foreach ($f in $currentFiles) {
+            if ($skip -contains $f.Name) { continue }
             if ($f.BaseName -like "*_Done") { continue }
-            $info = Get-RootAndState$f.Name
-            [void]$fileStates.Add(@{ filename = $info.Root; state =$info.State })
+            $info = Get-RootAndState $f.Name
+            [void]$fileStates.Add(@{ filename = $info.Root; state = $info.State })
             $rootToLocation[$info.Root] = @{ Folder = $folderPath; ActualName =$f.Name }
         }
     }
@@ -249,8 +234,8 @@ function Get-LocalSnapshot {
 }
 
 function Send-WsSync([switch]$Force) {
-    $snap = Get-LocalSnapshot$filesJson = ($snap.FileStates \vert{} Sort-Object {$_.filename } | ConvertTo-Json -Compress -Depth 3)
-    $hasConfirms = ($script:pendingDeleteConfirmations.Count -gt 0 -or $script:pendingDownloadConfirmations.Count -gt 0)$unacked = @($script:wsSyncSent.Values \vert{} Where-Object { ((Get-Date) -$_.At).TotalSeconds -lt 20 }).Count
+    $snap = Get-LocalSnapshot$filesJson = ($snap.FileStates | Sort-Object {$_.filename } | ConvertTo-Json -Compress -Depth 3)
+    $hasConfirms = ($script:pendingDeleteConfirmations.Count -gt 0 -or $script:pendingDownloadConfirmations.Count -gt 0)$unacked = @($script:wsSyncSent.Values | Where-Object { ((Get-Date) -$_.At).TotalSeconds -lt 20 }).Count
     if (-not $Force -and -not $script:wsNeedSync -and -not$hasConfirms -and $filesJson -eq$script:wsLastFiles) { return }
     if (-not $Force -and$unacked -gt 0) { return }
     foreach ($k in @($script:wsSyncSent.Keys)) {
@@ -305,7 +290,10 @@ function Step-Ws {
                 return
             }
             if ($script:wsConnectTask.IsFaulted -or$script:wsConnectTask.IsCanceled -or
-                $script:ws.State -ne [System.Net.WebSockets.WebSocketState]::Open) { Reset-Ws return }$script:wsConnectTask = $null$script:wsLinkedAt = Get-Date
+                $script:ws.State -ne [System.Net.WebSockets.WebSocketState]::Open) {
+                Reset-Ws
+                return
+            }$script:wsConnectTask = $null$script:wsLinkedAt = Get-Date
             $script:wsBackoff = 3$script:wsLastHb = Get-Date
             Send-WsSync -Force
         }
@@ -348,10 +336,7 @@ function Step-Ws {
 
 $downloadsDir = Join-Path$env:USERPROFILE "Downloads"
 
-# ==========================================================
-# EXPLICITLY REGISTER YOUR CUSTOM DATA FOLDER FOR WATCHING
-# ==========================================================
-$customDataDir = Join-Path $downloadsDir "Data"
+$customDataDir = Join-Path$downloadsDir "Data"
 if (Test-Path -LiteralPath $customDataDir) {
     Register-FolderWatch $customDataDir -Silent
     Get-ChildItem -LiteralPath $customDataDir -Directory -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
@@ -371,53 +356,47 @@ $script:searchRoots = @(
 ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -Unique
 
 $script:lastPendingFilenames = @()
-$script:keepUsedJson = $false
-$script:usedFlagsPolled = $false
-$script:deleteUsedJson = $false
-$script:doneDeleteInstant = $true
-$script:deleteDoneFiles = $true
+$script:keepUsedJson =$false
+$script:usedFlagsPolled =$false
+$script:deleteUsedJson =$false
+$script:doneDeleteInstant =$true
+$script:deleteDoneFiles =$true
 
 $script:watchedFolders = @{}
-$script:locatedFiles   = @{}
-$script:rootWatchers   = @{}
+$script:locatedFiles   = @{}$script:rootWatchers   = @{}
 
 function Register-FolderWatch([string]$folderPath, [switch]$Silent) {
     if ($script:watchedFolders.ContainsKey($folderPath)) { return }
     try {
         $sourceId = "EmailBotWatch_" + [Guid]::NewGuid().ToString("N")
         $fsw = New-Object System.IO.FileSystemWatcher
-        $fsw.Path = $folderPath
-        $fsw.Filter = "*"
+        $fsw.Path = $folderPath$fsw.Filter = "*"
         $fsw.NotifyFilter = [System.IO.NotifyFilters]::FileName
-        $fsw.EnableRaisingEvents = $true
-        Register-ObjectEvent -InputObject $fsw -EventName Renamed -SourceIdentifier $sourceId | Out-Null
-        $script:watchedFolders[$folderPath] = @{ SourceId = $sourceId }
+        $fsw.EnableRaisingEvents =$true
+        Register-ObjectEvent -InputObject $fsw -EventName Renamed -SourceIdentifier $sourceId | Out-Null$script:watchedFolders[$folderPath] = @{ SourceId =$sourceId }
     } catch {}
 }
 
 function Get-TrueRoot([string]$name) {
     $ext  = [System.IO.Path]::GetExtension($name)
     $stem = [System.IO.Path]::GetFileNameWithoutExtension($name)
-    if ($stem -like "*_Done") { $stem = $stem.Substring(0, $stem.Length - 5) }
-    if ($stem -like "*_Selected") { $stem = $stem.Substring(0, $stem.Length - 9) }
-    elseif ($stem -like "*_Processing") { $stem = $stem.Substring(0, $stem.Length - 11) }
-    return $stem + $ext
+    if ($stem -like "*_Done") { $stem = $stem.Substring(0,$stem.Length - 5) }
+    if ($stem -like "*_Selected") { $stem = $stem.Substring(0,$stem.Length - 9) }
+    elseif ($stem -like "*_Processing") { $stem = $stem.Substring(0,$stem.Length - 11) }
+    return $stem +$ext
 }
 
-function Sync-WatchedFolders([string[]]$pendingFilenames) {
-    $missing = $pendingFilenames | Where-Object { $_ -and -not $script:locatedFiles.ContainsKey($_) }
-    if (-not $missing -or $missing.Count -eq 0) { return }
-    $missingSet = @{}
-    foreach ($m in $missing) { $missingSet[$m] = $true }
+function Sync-WatchedFolders([string[]]$pendingFilenames) {$missing = $pendingFilenames | Where-Object {$_ -and -not $script:locatedFiles.ContainsKey($_) }
+    if (-not $missing -or $missing.Count -eq 0) { return }$missingSet = @{}
+    foreach ($m in $missing) {$missingSet[$m] =$true }
 
-    foreach ($root in $script:searchRoots) {
+    foreach ($root in$script:searchRoots) {
         if ($missingSet.Count -eq 0) { break }
-        $candidates = Get-ChildItem -LiteralPath $root -Recurse -Depth 3 -File -ErrorAction SilentlyContinue
-        foreach ($c in $candidates) {
-            if ($skip -contains $c.Name) { continue }
-            $trueRoot = Get-TrueRoot $c.Name
-            if ($missingSet.ContainsKey($trueRoot)) {
-                $script:locatedFiles[$trueRoot] = $c.DirectoryName
+        $candidates = Get-ChildItem -LiteralPath$root -Recurse -Depth 3 -File -ErrorAction SilentlyContinue
+        foreach ($c in$candidates) {
+            if ($skip -contains$c.Name) { continue }
+            $trueRoot = Get-TrueRoot$c.Name
+            if ($missingSet.ContainsKey($trueRoot)) {$script:locatedFiles[$trueRoot] =$c.DirectoryName
                 Register-FolderWatch $c.DirectoryName -Silent
                 $missingSet.Remove($trueRoot)
                 if ($missingSet.Count -eq 0) { break }
@@ -433,8 +412,8 @@ function Get-SafeDataType([string]$dataType) {
 }
 
 function Get-ManagedDownloadFolder([string]$dataType) {
-    $safe   = Get-SafeDataType $dataType
-    $folder = Join-Path $downloadsDir "Data Files\$safe"
+    $safe   = Get-SafeDataType$dataType
+    $folder = Join-Path$downloadsDir "Data Files\$safe"
     if (-not (Test-Path -LiteralPath $folder)) {
         New-Item -ItemType Directory -Path $folder -Force | Out-Null
     }
@@ -442,12 +421,10 @@ function Get-ManagedDownloadFolder([string]$dataType) {
     return $folder
 }
 
-function Fetch-PendingDownloads([array]$pendingDownloads) {
-    $need = New-Object System.Collections.Generic.List[string]
-    foreach ($entry in $pendingDownloads) {
-        $fname = $entry.filename
-        if (-not $fname) { continue }
-        $target = Join-Path (Get-ManagedDownloadFolder $entry.data_type) $fname
+function Fetch-PendingDownloads([array]$pendingDownloads) {$need = New-Object System.Collections.Generic.List[string]
+    foreach ($entry in$pendingDownloads) {
+        $fname =$entry.filename
+        if (-not $fname) { continue }$target = Join-Path (Get-ManagedDownloadFolder $entry.data_type)$fname
         if (Test-Path -LiteralPath $target) {
             $confirmKey = "$(Get-SafeDataType $entry.data_type)::$fname"
             if (-not $script:pendingDownloadConfirmations.Contains($confirmKey)) {
@@ -459,10 +436,10 @@ function Fetch-PendingDownloads([array]$pendingDownloads) {
     }
     if ($need.Count -eq 0) { return }
 
-    $tempZip = Join-Path $env:TEMP ("ebfetch_" + [Guid]::NewGuid().ToString("N") + ".zip")
+    $tempZip = Join-Path$env:TEMP ("ebfetch_" + [Guid]::NewGuid().ToString("N") + ".zip")
     try {
-        $body = @{ secret = $secret; user_id = $userId } | ConvertTo-Json -Compress
-        Invoke-WebRequest -Uri $fetchUrl -Method Post -Body $body -ContentType "application/json" `
+        $body = @{ secret = $secret; user_id =$userId } | ConvertTo-Json -Compress
+        Invoke-WebRequest -Uri $fetchUrl -Method Post -Body$body -ContentType "application/json" `
             -TimeoutSec 45 -OutFile $tempZip -UseBasicParsing -ErrorAction Stop
 
         Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue
