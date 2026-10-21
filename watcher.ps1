@@ -203,7 +203,10 @@ Ensure-Wkhtmltox
 $done = @{}
 $usedReported = @{}
 
-$createdReported = @{}$seenSelected   = @{}
+
+$createdReported = @{}
+$seenSelected = @{}
+
 $seenProcessing = @{}$script:originalHashes = @{}
 $count = 0$skip  = @("watcher_config.json", "watcher.ps1", "Start Watcher.vbs", "Start Watcher.bat",
            "reported_done.txt", "reported_done_day.txt")
