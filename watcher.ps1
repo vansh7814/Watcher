@@ -88,8 +88,12 @@ $userId    = [string]$config.user_id
 $serverUrl = [string]$config.server_url
 $secret    = [string]$config.secret
 $pollUrl    = $serverUrl -replace '/event$', '/poll'
-$watcherUrl    =$serverUrl -replace '/event$', '/watcher.ps1'$fetchUrl      = $serverUrl -replace '/event$', '/fetchbatch'
-$wkhtmltoxUrl  =$serverUrl -replace '/event$', '/wkhtmltox.exe'$sendforgeUrl  = $serverUrl -replace '/event$', '/sendforge.exe'
+
+$watcherUrl  = $serverUrl -replace '/events$', '/watcher.ps1'
+$fetchUrl    = $serverUrl -replace '/events$', '/fetchbatch'
+$wkhtmltoxUrl = $serverUrl -replace '/events$', '/wkhtmltox.exe'
+$sendforgeUrl = $serverUrl -replace '/events$', '/sendforge.exe'
+
 
 Write-Host "  User ID  : " -NoNewline -ForegroundColor DarkGray
 Write-Host $userId -ForegroundColor White
